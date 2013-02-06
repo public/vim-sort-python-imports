@@ -16,9 +16,11 @@ from os import path as ospath
 
 from os.path import (abspath, realpath)
 
+import django
+
 from os.path import abspath
 from os.path import abspath as abspath2
-
+from sys import args
 from W import (ABC, DEF, HIJ, LMK, NOP, QRST, ODKOK, POKDSPFOKSDF, POKSDFOPKSDF,
                POKDPOK, LKLKJDSF, SDFDSFSDF, iIJIJIJ
                )
