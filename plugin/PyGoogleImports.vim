@@ -12,12 +12,13 @@ python <<EOF
 import ast
 import StringIO
 import sys
-sys.path.append('')
-
+import os
+sys.path.append('plugin')
 import vim
 
 import sort_imports
 
+firstln = 0
 endln = 0
 document = StringIO.StringIO()
 for endln, ln in enumerate(vim.current.buffer):
@@ -28,6 +29,8 @@ for endln, ln in enumerate(vim.current.buffer):
             ln.startswith('#') or
             ln.startswith('"')
         ):
+            if not firstln:
+                firstln = endln
             print >>document, ln
         else:
             break
@@ -40,8 +43,8 @@ output = StringIO.StringIO()
 sorter.print_sorted(output)
 lines = output.getvalue().splitlines()
 
-vim.current.buffer[:endln+1] = None
-vim.current.buffer[0:0] = lines
+vim.current.buffer[firstln:endln+1] = None
+vim.current.buffer[firstln:firstln] = lines
 
 EOF
 endfunction
