@@ -25,26 +25,29 @@ for endln, ln in enumerate(vim.current.buffer):
     if ln.strip():
         if (
             ln.startswith('from') or
-            ln.startswith('import') or
-            ln.startswith('#') or
-            ln.startswith('"')
+            ln.startswith('import')
         ):
             if not firstln:
                 firstln = endln
             print >>document, ln
         else:
             break
+endln -= 1
+
+source = document.getvalue()
 
 sorter = sort_imports.ImportSorter()
-sorter.visit(ast.parse(document.getvalue()))
+sorter.visit(ast.parse(source))
 
 output = StringIO.StringIO()
 
 sorter.print_sorted(output)
 lines = output.getvalue().splitlines()
 
-vim.current.buffer[firstln:endln+1] = None
-vim.current.buffer[firstln:firstln] = lines
+print firstln, endln
+
+vim.current.buffer[firstln-1:endln+1] = None
+vim.current.buffer[firstln-1:firstln-1] = lines
 
 EOF
 endfunction

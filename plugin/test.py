@@ -1,36 +1,144 @@
+import ast
+import textwrap
+import unittest
 
-import os.path.abspath
-import os.path
-import os
-import os as os2
+import sort_imports
 
-import os, sys
-import os as os3, sys as sys2
+from cStringIO import StringIO
 
-import S,R,Q
+def sort_str(source):
+    tree = ast.parse(source)
+    s = sort_imports.ImportSorter()
+    s.visit(tree)
+    io = StringIO()
+    s.print_sorted(io)
+    return io.getvalue()
 
-import os,os,os,os
 
-from os import path
-from os import path as ospath
+class TestSortImports(unittest.TestCase):
 
-from os.path import (abspath, realpath)
+    def _test_transform(self, input, expected):
+        sorted_source = sort_str(textwrap.dedent(input))
+        self.assertEqual(
+            sorted_source,
+            textwrap.dedent(expected)
+        )
 
-import django
+    def test_sort_many(self):
+        self._test_transform(
+            """\
+            from example import b
+            from example import f
+            from example import g
+            from example import c, e, d
+            from example import a
 
-from os.path import abspath
-from os.path import abspath as abspath2
-from sys import args
-from W import (ABC, DEF, HIJ, LMK, NOP, QRST, ODKOK, POKDSPFOKSDF, POKSDFOPKSDF,
-               POKDPOK, LKLKJDSF, SDFDSFSDF, iIJIJIJ
-               )
 
-def F():
-    import LIB
+            import a
+            import d
+            import b
+            import e, g, f
+            import c
+            """,
+            """\
+            import a
+            import b
+            import c
+            import d
+            import e
+            from example import a
+            from example import b
+            from example import c
+            from example import d
+            from example import e
+            from example import f
+            from example import g
+            import f
+            import g
 
-from X import C, B, A
 
-from . import a
-from .. import b
-from ... import c
+            """
+        )
+
+    def test_split_multiple_names_and_sort(self):
+        self._test_transform(
+            """\
+            from example import b, a
+            import example
+            """,
+            """\
+            import example
+            from example import a
+            from example import b
+
+
+            """
+        )
+
+    def test_stdlib_goes_first(self):
+        self._test_transform(
+            """\
+            import example
+            import os
+            from sys import argv
+            from example import a
+            """,
+            """\
+            import os
+            from sys import argv
+
+            import example
+            from example import a
+
+
+            """
+        )
+
+    def test_relative_import(self):
+        self._test_transform(
+            """\
+            from .. import example
+            from . import example
+            from ... import example
+            """,
+            """\
+            from . import example
+            from .. import example
+            from ... import example
+
+
+            """
+        )
+
+    def test_non_module_import_ignored(self):
+        self._test_transform(
+            """\
+            import example
+            def f():
+                import func_example
+            """,
+            """\
+            import example
+
+
+            """
+        )
+
+    def test_remove_duplicates(self):
+        self._test_transform(
+            """\
+            import example
+            import example, example
+            from example import a, a, b
+            from example import b, b, a
+            """,
+            """\
+            import example
+            from example import a
+            from example import b
+
+
+            """
+        )
+
 

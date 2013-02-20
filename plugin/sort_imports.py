@@ -1,14 +1,14 @@
-
-import sys
 import ast
 from collections import defaultdict
-import os
-import re
-import keyword
-import tokenize
-import imp
-
 import distutils.sysconfig as sysconfig
+import imp
+import keyword
+import os
+import pkgutil
+import re
+import sys
+import tokenize
+
 
 def isidentifier(value):
     if value in keyword.kwlist:
@@ -26,32 +26,14 @@ class ImportSorter(ast.NodeVisitor):
 
         (stdlib, site_packages, names)
 
-    Before that happens though we group by type (Import/FromImport) and sort
-    the names within the import.
-
-    This means things like
-
-        import sys, os
-
-    become
-
-        import os, sys
-
-    And
-
-        from sys import path, args
-
-    become
-
-        from sys import args, path
+    We also make sure only 1 name is imported per import statement.
     """
 
     def __init__(self):
         self.imports = set()
         self.from_imports = defaultdict(set)
-        self.stdlibs = set(self.iter_stdlibs()) | set(['sys'])
+        self.stdlibs = set(self.iter_stdlibs()) | set(sys.builtin_module_names)
         self.python_paths = [p for p in sys.path if p]
-        self.site_packages = set(self.iter_stdlibs())
 
     @classmethod
     def iter_stdlibs(cls):
@@ -62,17 +44,8 @@ class ImportSorter(ast.NodeVisitor):
         instead we're just going to rely on getting most of them and then only
         matching on the root of import statements the rest of the time.
         """
-        def modules(path):
-            for name in os.listdir(path):
-                if name.endswith('.py') and isidentifier(name[:-3]):
-                        yield name[:-3]
-
-                elif os.path.isfile(os.path.join(path, name, '__init__.py')):
-                    if isidentifier(name):
-                        yield name
-
         stdlib_path = sysconfig.get_python_lib(standard_lib=True)
-        return modules(stdlib_path)
+        return (nm for _, nm, _ in pkgutil.iter_modules([stdlib_path]))
 
     def visit_Import(self, node):
         if node.col_offset != 0:
@@ -103,14 +76,16 @@ class ImportSorter(ast.NodeVisitor):
                 name = [node.names[0].name, node.names[0].asname]
             else:
                 name = [node.names[0].name]
+            from_names = None
 
         elif isinstance(node, ast.ImportFrom):
             name = [node.module]
-
+            from_names = [nm.name for nm in node.names]
         else:
             raise TypeError(node)
 
-        key = [True, True, name, isinstance(node, ast.ImportFrom)]
+        # stdlib, site package, name, is_fromimport, from_names
+        key = [True, True, name, from_names]
 
         if not name[0]:
             key[2] = [node.level]
@@ -140,13 +115,13 @@ class ImportSorter(ast.NodeVisitor):
 
         # first turn all the from imports back into proper nodes
         for (level, module), names in self.from_imports.iteritems():
-            node = ast.ImportFrom(
-                module=module,
-                names=[ast.alias(name=nm, asname=asnm)
-                       for nm, asnm in sorted(names)],
-                level=level
-            )
-            nodes.append((self._node_sort_key(node), node))
+            for nm, asnm in sorted(names):
+                node = ast.ImportFrom(
+                    module=module,
+                    names=[ast.alias(name=nm, asname=asnm)],
+                    level=level
+                )
+                nodes.append((self._node_sort_key(node), node))
 
         # then build the normal imports again
         for nm, asnm in self.imports:
@@ -155,61 +130,31 @@ class ImportSorter(ast.NodeVisitor):
 
         nodes.sort()
 
-        # now build up our output while being careful to keep
-        # the line length within 80cols for PEP8
-        wraplen = 79
         pkey = None
         for key, node in nodes:
             # insert new lines between groups
-            if pkey and (
-                key[0] != pkey[0] or
-                key[1] != pkey[1]
-            ):
+            if pkey and key[:2] != pkey[:2]:
                 print >>io
-
-            # normal imports are pretty easy.
-            # although we ignore the possibility of 70 column long identifiers
-            if isinstance(node, ast.Import):
-                pystr = "import %s" % node.names[0].name
-
-                if node.names[0].asname:
-                    pystr += ' as ' + node.names[0].asname
-
-                print >>io, pystr
-
-            # from imports require us to be a bit more cunning about
-            # getting the wrapping right
-            elif isinstance(node, ast.ImportFrom):
-                from_line = "from %s import" % (
-                    node.module or '.' * node.level
-                )
-                name_lines = []
-                for name in node.names:
-                    if name.asname:
-                        name = "%s as %s" % (name.name, name.asname)
-                    else:
-                        name = name.name
-
-                    if (  # time to wrap the line
-                        not name_lines or
-                        len(name) + 4 +
-                        sum(len(n) for n in name_lines[-1]) +
-                        (2 * len(name_lines[-1])) > wraplen
-                    ):
-                        name_lines.append([name])
-                    else:
-                        name_lines[-1].append(name)
-
-                if len(name_lines) > 1:
-                    from_line += ' (\n   '
-
-                print >>io, from_line,
-                print >>io, '\n    '.join(', '.join(ln) for ln in name_lines)
-
-                if len(name_lines) > 1:
-                    print >>io, ')'
-
             pkey = key
+
+            # names here will actually always only have 1 element in it
+            # because we are only allowed 1 per line, but it's easy
+            # enough to cope with multiple anyway.
+            all_names = ', '.join(
+                (' as '.join(nm for nm in (name.name, name.asname) if nm))
+                for name in node.names
+            )
+
+            if isinstance(node, ast.Import):
+                print >>io, "import %s" % all_names
+            elif isinstance(node, ast.ImportFrom):
+                print >>io, "from %s import %s" % (
+                    node.module or '.' * node.level,
+                    all_names
+                )
+
+        print >>io
+        print >>io
 
         return nodes
 
