@@ -6,10 +6,14 @@ import sort_imports
 
 from cStringIO import StringIO
 
-def sort_str(source):
+def visit(source):
     tree = ast.parse(source)
     s = sort_imports.ImportSorter()
     s.visit(tree)
+    return s
+
+def sort_str(source):
+    s = visit(source)
     io = StringIO()
     s.print_sorted(io)
     return io.getvalue()
@@ -24,6 +28,33 @@ class TestSortImports(unittest.TestCase):
             textwrap.dedent(expected)
         )
 
+    def test_check_order_1(self):
+        source = textwrap.dedent("""\
+        import a
+        import c
+        import b
+        """)
+        errors = visit(source).sort_errors()
+        self.assertEqual(len(errors), 1)
+
+    @unittest.expectedFailure
+    def test_check_order_2(self):
+        source = textwrap.dedent("""\
+        from a import a
+        from a import b
+        from a import c
+        """)
+        errors = visit(source).sort_errors()
+        self.assertEqual(len(errors), 1)
+
+    @unittest.expectedFailure
+    def test_check_order_3(self):
+        source = textwrap.dedent("""\
+        from a import c, b, a
+        """)
+        errors = visit(source).sort_errors()
+        self.assertEqual(len(errors), 1)
+
     def test_sort_many(self):
         self._test_transform(
             """\
@@ -32,7 +63,6 @@ class TestSortImports(unittest.TestCase):
             from example import g
             from example import c, e, d
             from example import a
-
 
             import a
             import d

@@ -2,6 +2,7 @@ import ast
 from collections import defaultdict
 import distutils.sysconfig as sysconfig
 import imp
+import itertools
 import keyword
 import os
 import pkgutil
@@ -30,6 +31,7 @@ class ImportSorter(ast.NodeVisitor):
     """
 
     def __init__(self):
+        self.original_nodes = []
         self.imports = set()
         self.from_imports = defaultdict(set)
         self.stdlibs = set(self.iter_stdlibs()) | set(sys.builtin_module_names)
@@ -53,6 +55,7 @@ class ImportSorter(ast.NodeVisitor):
         else:
             # collect all the import names together in a big set.
             self.imports.update((nm.name, nm.asname) for nm in node.names)
+            self.original_nodes.append(node)
 
     def visit_ImportFrom(self, node):
         # we need to group the names imported from each module
@@ -65,6 +68,7 @@ class ImportSorter(ast.NodeVisitor):
             self.from_imports[(node.level, node.module)].update(
                 (nm.name, nm.asname) for nm in node.names
             )
+            self.original_nodes.append(node)
 
     def _node_sort_key(self, node):
         """
@@ -110,7 +114,7 @@ class ImportSorter(ast.NodeVisitor):
 
         return key
 
-    def print_sorted(self, io=sys.stdout):
+    def new_nodes(self):
         nodes = []
 
         # first turn all the from imports back into proper nodes
@@ -128,7 +132,24 @@ class ImportSorter(ast.NodeVisitor):
             node = ast.Import(names=[ast.alias(name=nm, asname=asnm)])
             nodes.append((self._node_sort_key(node), node))
 
+        return nodes
+
+    def sorted_nodes(self):
+        nodes = self.new_nodes()
         nodes.sort()
+        return nodes
+
+    def sort_errors(self):
+        errors = []
+        nodes = [(self._node_sort_key(n), n) for n in self.original_nodes]
+        nodes_iter = iter(nodes[1:])
+        for (a_k, a), (b_k, b) in itertools.izip(nodes, nodes_iter):
+            if a_k > b_k:
+                errors.append(((a_k, a), (b_k, b)))
+        return errors
+
+    def print_sorted(self, io=sys.stdout):
+        nodes = self.sorted_nodes()
 
         pkey = None
         for key, node in nodes:
