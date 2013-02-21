@@ -50,7 +50,7 @@ class ImportSorter(ast.NodeVisitor):
         stdlib_paths = [
             path
             for path in sys.path
-            if path.startswith(stdlib_path)
+            if path.startswith(stdlib_path) and '-packages' not in path
         ]
         return (nm for _, nm, _ in pkgutil.iter_modules(stdlib_paths))
 

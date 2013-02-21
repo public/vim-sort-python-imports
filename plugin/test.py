@@ -157,6 +157,27 @@ class TestSortImports(unittest.TestCase):
             """
         )
 
+    def test_sitepackages_goes_second(self):
+        self._test_transform(
+            """\
+            import example
+            import pip
+            import os
+            """,
+
+            """\
+            import os
+
+            import pip
+
+            import example
+
+
+            """
+        )
+
+
+
     def test_relative_import(self):
         self._test_transform(
             """\
