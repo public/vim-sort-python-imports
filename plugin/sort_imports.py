@@ -47,7 +47,12 @@ class ImportSorter(ast.NodeVisitor):
         matching on the root of import statements the rest of the time.
         """
         stdlib_path = sysconfig.get_python_lib(standard_lib=True)
-        return (nm for _, nm, _ in pkgutil.iter_modules([stdlib_path]))
+        stdlib_paths = [
+            path
+            for path in sys.path
+            if path.startswith(stdlib_path)
+        ]
+        return (nm for _, nm, _ in pkgutil.iter_modules(stdlib_paths))
 
     def visit_Import(self, node):
         if node.col_offset != 0:
@@ -97,21 +102,20 @@ class ImportSorter(ast.NodeVisitor):
             name = [v.lower() for v in name]
             key[2] = name
             p = ast.parse(name[0])
-            for node in ast.walk(p):
-                if not isinstance(node, ast.Name):
+            for n in ast.walk(p):
+                if not isinstance(n, ast.Name):
                     continue
 
-                if node.id in self.stdlibs:
+                if n.id in self.stdlibs:
                     key[0] = False
                 else:
                     try:
                         key[1] = not imp.find_module(
-                            node.id,
+                            n.id,
                             self.python_paths
                         )
                     except ImportError:
                         continue
-
         return key
 
     def new_nodes(self):

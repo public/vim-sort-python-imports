@@ -55,6 +55,39 @@ class TestSortImports(unittest.TestCase):
         errors = visit(source).sort_errors()
         self.assertEqual(len(errors), 1)
 
+    def test_our_imports(self):
+        self._test_transform(
+            """\
+            import tokenize
+            import sys
+            import re
+            import pkgutil
+            import os
+            import keyword
+            import itertools
+            import imp
+            import distutils.sysconfig as sysconfig
+            import ast
+            from collections import defaultdict
+            """,
+
+            """\
+            import ast
+            from collections import defaultdict
+            import distutils.sysconfig as sysconfig
+            import imp
+            import itertools
+            import keyword
+            import os
+            import pkgutil
+            import re
+            import sys
+            import tokenize
+
+
+            """
+        )
+
     def test_sort_many(self):
         self._test_transform(
             """\
